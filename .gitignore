@@ -1,0 +1,3 @@
+# Local-only notes, never commit credentials (even test ones) to a public repo
+notes/
+*.local.md
