@@ -60,8 +60,24 @@ REPORT.md     Final assessment report (summary, findings table, remediation, ret
 
 ## Status
 
-Setup complete — local instance running, test account created, environment explored.
-Findings in progress.
+Assessment complete. **6 vulnerabilities** documented across 5 OWASP Top 10 categories,
+each with a source-code fix and an automated regression script.
+
+| ID | Finding | OWASP 2021 | Severity |
+|----|---------|-----------|----------|
+| [VL-01](findings/01-sqli-login-auth-bypass.md) | SQL injection login auth bypass | A03 Injection | Critical |
+| [VL-02](findings/02-idor-basket-access.md) | IDOR on shopping baskets | A01 Broken Access Control | High |
+| [VL-03](findings/03-dom-xss-search.md) | DOM-based XSS in search | A03 Injection (XSS) | Medium |
+| [VL-04](findings/04-weak-password-reset.md) | Unthrottled security-question reset | A07 Auth Failures | High |
+| [VL-05](findings/05-ftp-sensitive-file-exposure.md) | `/ftp` exposure + null-byte bypass | A05 Misconfiguration | High |
+| [VL-06](findings/06-unsalted-md5-password-hash.md) | Unsalted MD5 password storage | A02 Cryptographic Failures | High |
+
+Full write-up in [REPORT.md](REPORT.md); fixes in [`fixes/`](fixes/); regression suite
+in [`scripts/`](scripts/) (`python3 scripts/run_all.py`).
+
+**Live retest pending:** scripts are authored and statically verified, but a live
+before/after run needs the Docker instance up (it was not running at authoring time).
+See [REPORT.md](REPORT.md#5-retest-results) for the one-command retest procedure.
 
 ## Disclaimer
 
