@@ -64,38 +64,44 @@ standard project-wide; keep confidential files out of any publicly served direct
 
 ## 5. Retest results
 
-The regression suite was authored and **statically verified** (all scripts compile and
-the harness correctly distinguishes a live Juice Shop target from an unrelated
-service). At the time of writing, the local Docker instance was **not running** — the
-`3001` port was held by an unrelated mock service and the Docker daemon was down — so a
-live before/after capture is pending.
+The vulnerable baseline was run **live** on 2026-11-17 against OWASP Juice Shop
+`v17.3.0` in Docker at `http://localhost:3002` (port `3002` was used because `3001` was
+occupied by an unrelated service). **All six findings reproduced** —
+`python3 scripts/run_all.py` reported `0 passed, 6 vulnerable, 0 skipped`. Evidence is
+in `screenshots/` (suite output, raw HTTP proof, and the live app).
 
-### How to produce the live retest
+The exploits were corroborated independently by the application's own challenge tracker,
+which registered **Login Admin** (VL-01), **View Basket** (VL-02), **Poison Null Byte**
+and **Confidential Document** (VL-05), and **Password Strength** (VL-01/06) — visible in
+`screenshots/app-home.png`.
+
+The **patched ("after") column is pending**: it requires applying `fixes/` to a Juice
+Shop fork, rebuilding, and re-running the suite (expected `6 passed`). The scripts'
+exit-code contract makes this a single `run_all.py` invocation.
+
+### Retest table
+
+| ID | Vulnerable build (verified live) | Patched build | Evidence |
+|----|----------------------------------|---------------|----------|
+| VL-01 | **FAIL** — `' OR 1=1--` returns an `admin` (id 1) JWT | _pending rebuild_ | `retest-vulnerable.png`, `raw-http-evidence.txt`, `app-home.png` |
+| VL-02 | **FAIL** — read baskets 1 & 2 (other users) | _pending rebuild_ | `retest-vulnerable.png` |
+| VL-03 | **FAIL** — `bypassSecurityTrustHtml` sink present in `main.js` | _pending rebuild_ | `retest-vulnerable.png` |
+| VL-04 | **FAIL** — 15 wrong reset answers, no `429` | _pending rebuild_ | `retest-vulnerable.png` |
+| VL-05 | **FAIL** — `%2500.md` served `package.json.bak` | _pending rebuild_ | `retest-vulnerable.png`, `vl05-ftp-exposure.png` |
+| VL-06 | **FAIL** — stored hash == `md5(password)` | _pending rebuild_ | `retest-vulnerable.png`, `raw-http-evidence.txt` |
+
+### Reproducing / completing the patched run
 
 ```bash
-# 1. Start the vulnerable instance (resolve the port if 3001 is in use)
-docker run -d --name juice -p 127.0.0.1:3001:3000 bkimminich/juice-shop:v17.3.0
+# Vulnerable baseline (already captured):
+docker run -d --name juice -p 127.0.0.1:3002:3000 bkimminich/juice-shop:v17.3.0
+export JUICE_URL=http://localhost:3002 TEST_EMAIL=... TEST_PASSWORD=...
+python3 scripts/run_all.py            # -> 6 vulnerable
 
-# 2. Baseline: every finding should report FAIL (vulnerable)
-export TEST_EMAIL=... TEST_PASSWORD=...        # from git-ignored notes
-python3 scripts/run_all.py            # expect: vulnerable
-
-# 3. Apply fixes to a patched build (see fixes/README.md), run it on the same URL
-
-# 4. Retest: every finding should report PASS (patched)
-python3 scripts/run_all.py            # expect: all passed
+# Patched build (to complete the "after" column):
+#   apply fixes/ to a juice-shop v17.3.0 fork, rebuild, run it on the same URL, then:
+python3 scripts/run_all.py            # expect -> 6 passed
 ```
-
-### Retest table (to be completed on live run)
-
-| ID | Vulnerable build | Patched build | Evidence |
-|----|------------------|---------------|----------|
-| VL-01 | _pending_ | _pending_ | `screenshots/` |
-| VL-02 | _pending_ | _pending_ | `screenshots/` |
-| VL-03 | _pending_ | _pending_ | `screenshots/` |
-| VL-04 | _pending_ | _pending_ | `screenshots/` |
-| VL-05 | _pending_ | _pending_ | `screenshots/` |
-| VL-06 | _pending_ | _pending_ | `screenshots/` |
 
 ## 6. Disclaimer
 

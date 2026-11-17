@@ -75,9 +75,11 @@ each with a source-code fix and an automated regression script.
 Full write-up in [REPORT.md](REPORT.md); fixes in [`fixes/`](fixes/); regression suite
 in [`scripts/`](scripts/) (`python3 scripts/run_all.py`).
 
-**Live retest pending:** scripts are authored and statically verified, but a live
-before/after run needs the Docker instance up (it was not running at authoring time).
-See [REPORT.md](REPORT.md#5-retest-results) for the one-command retest procedure.
+**Live baseline verified (2026-11-17):** all 6 findings reproduced against a live
+Juice Shop `v17.3.0` container — `scripts/run_all.py` → `6 vulnerable`. Evidence in
+[`screenshots/`](screenshots/). The patched ("after") run is the one remaining step:
+apply [`fixes/`](fixes/) to a fork, rebuild, and re-run the suite (expect `6 passed`).
+See [REPORT.md §5](REPORT.md#5-retest-results).
 
 ## Disclaimer
 

@@ -31,7 +31,9 @@ python3 scripts/test_01_sqli_login.py
 | `JUICE_URL` | `http://localhost:3001` | all | base URL of the lab instance |
 | `TEST_EMAIL` | `testuser@local.test` | 02, 04 | local throwaway account |
 | `TEST_PASSWORD` | *(unset)* | 02 | password for the above (kept out of git) |
-| `JUICE_ADMIN_TOKEN` | *(unset)* | 06 | admin JWT to read stored password hashes |
+
+VL-06 needs no admin token: it reads the stored hash from the login JWT the app issues
+to the probe user itself.
 
 Credentials are **not** committed. Export them from your local notes before running the
 checks that need them, e.g.:

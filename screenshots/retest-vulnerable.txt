@@ -1,0 +1,30 @@
+# Regression suite — VULNERABLE baseline
+# Target: OWASP Juice Shop v17.3.0 @ http://localhost:3002
+# Date: 2026-11-17T22:34:33Z
+
+Target: http://localhost:3002
+============================================================
+[FAIL] VL-01 SQLi login auth bypass: VULNERABLE (exploit succeeded)
+       injection `' OR 1=1--` logged in and received a JWT (HTTP 200). The login query is not parameterized.
+[FAIL] VL-02 IDOR basket access: VULNERABLE (exploit succeeded)
+       read baskets not owned by the caller: basket 1 (UserId=1), basket 2 (UserId=2)
+[FAIL] VL-03 DOM XSS in search: VULNERABLE (exploit succeeded)
+       frontend bundle main.js still uses bypassSecurityTrustHtml — the DOM-XSS sink for the search term is present.
+[FAIL] VL-04 password-reset brute force: VULNERABLE (exploit succeeded)
+       15 wrong answers accepted with no 429 throttle (statuses: [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]). Online brute force is feasible.
+[FAIL] VL-05 /ftp null-byte bypass: VULNERABLE (exploit succeeded)
+       null-byte bypass served a backup file via /ftp/package.json.bak%2500.md (HTTP 200, 4291 bytes).
+[FAIL] VL-06 unsalted MD5 password hash: VULNERABLE (exploit succeeded)
+       stored password is unsalted MD5: 737af68e8bb073f59aff155c7c7b1c69 (== md5(password)).
+============================================================
+Summary:
+  [FAIL] VL-01 SQLi login auth bypass
+  [FAIL] VL-02 IDOR basket access
+  [FAIL] VL-03 DOM XSS in search
+  [FAIL] VL-04 password-reset brute force
+  [FAIL] VL-05 /ftp null-byte bypass
+  [FAIL] VL-06 unsalted MD5 password hash
+
+0 passed, 6 vulnerable, 0 skipped.
+
+suite exit=0

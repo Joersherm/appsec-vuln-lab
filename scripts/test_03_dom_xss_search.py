@@ -25,7 +25,7 @@ def find_main_bundle():
     if r.status != 200:
         return None
     m = re.findall(r'(?:src=")(main[.\w-]*\.js)"?', r.text)
-    return m[0] if m else None
+    return m[0] if m else "main.js"
 
 
 def test():
