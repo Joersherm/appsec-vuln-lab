@@ -1,59 +1,41 @@
-# Fix 04 — Rate-limit account recovery (VL-04, weak reset / no throttle)
+# Fix 04 — Tighten account-recovery rate limiting (VL-04)
 
 **Finding:** `findings/04-weak-password-reset.md`
-**Files:** `server.ts` (register limiter), `routes/resetPassword.ts` (constant-time compare)
-**Approach:** apply a strict per-IP/per-account rate limit with lockout to the reset
-endpoint, and use a constant-time comparison for the answer.
+**File:** `server.ts`
+**Approach:** Juice Shop `v17.3.0` already mounts a rate limiter on the reset endpoint,
+but it is ineffective: the cap is **100** attempts per 15 minutes (far too high to stop
+targeted brute force of one account's low-entropy answer) **and** it keys on the
+`X-Forwarded-For` header, which the client can spoof to get a fresh bucket per request.
+The fix lowers the cap and keys on the real TCP peer address.
 
-## Patch
+## Patch (actual, from `juice-shop-v17.3.0-fixes.patch`)
 
 ```diff
 --- a/server.ts
 +++ b/server.ts
-@@
- import express from 'express'
-+import rateLimit from 'express-rate-limit'
-@@
-+  // Throttle brute force of the security-question reset flow.
-+  const resetPasswordLimiter = rateLimit({
-+    windowMs: 15 * 60 * 1000,   // 15 minutes
-+    max: 5,                     // 5 attempts per window per IP
-+    standardHeaders: true,
-+    legacyHeaders: false,
-+    message: { error: 'Too many attempts. Try again later.' }
-+  })
-+  app.use('/rest/user/reset-password', resetPasswordLimiter)
-```
-
-```diff
---- a/routes/resetPassword.ts
-+++ b/routes/resetPassword.ts
-@@
- import { SecurityAnswerModel } from '../models/securityAnswer'
- import * as security from '../lib/insecurity'
-+import { timingSafeEqual } from 'node:crypto'
-@@
--    if (security.hmac(req.body.answer) === answer.answer) {
-+    const provided = Buffer.from(security.hmac(req.body.answer ?? ''))
-+    const stored = Buffer.from(answer.answer ?? '')
-+    const match = provided.length === stored.length && timingSafeEqual(provided, stored)
-+    if (match) {
-       user.update({ password: req.body.new }).then(() => res.status(200).json({ user }))
-     } else {
-       res.status(401).send(res.__('Wrong answer to security question.'))
-     }
+@@ Rate limiting
+   app.use('/rest/user/reset-password', rateLimit({
+     windowMs: 5 * 60 * 1000,
+-    max: 100,
+-    keyGenerator ({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } // vuln-code-snippet vuln-line resetPasswordMortyChallenge
++    max: 5, // VL-04: strict cap to stop online brute force of low-entropy security answers
++    keyGenerator: (req: any) => req.socket?.remoteAddress ?? req.ip // VL-04: key on the real TCP peer, not the spoofable X-Forwarded-For header
+   }))
 ```
 
 ## Why this works
 
-After 5 failed attempts in the window the endpoint returns `429`, so online brute force
-of a low-entropy security answer is no longer feasible. `timingSafeEqual` removes a
-timing oracle on the answer comparison.
+With a cap of 5 per window the endpoint returns `429` after a handful of wrong answers,
+so online brute force of a guessable security answer is no longer feasible. Keying on
+the socket peer address (not the attacker-controlled `X-Forwarded-For` header) closes
+the per-request bypass — rotating the header no longer resets the counter.
 
 ## Defense in depth (recommended follow-up)
 
 - Replace the security question with an **out-of-band, signed, single-use, expiring
   reset token** delivered by email; never change a password on a knowledge answer alone.
+- Compare the submitted answer in constant time (`crypto.timingSafeEqual`) to remove any
+  timing oracle.
 - Also rate-limit `/rest/user/login` and add account lockout/backoff.
 
 ## Verify

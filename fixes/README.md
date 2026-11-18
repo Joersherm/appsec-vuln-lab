@@ -16,26 +16,27 @@ command that proves it.
 
 ## Applying the fixes
 
-The diffs are written against upstream file paths so they can be applied to a fork:
+`juice-shop-v17.3.0-fixes.patch` is the **actual** unified diff produced from a
+`v17.3.0` checkout (7 files, all six findings). Apply it to a fork and build:
 
 ```bash
-# 1. Fork / clone the pinned source
-git clone --branch v17.3.0 https://github.com/juice-shop/juice-shop.git
-cd juice-shop && git switch -c fixes
+# 1. Clone the pinned source and apply the patch
+git clone --depth 1 --branch v17.3.0 https://github.com/juice-shop/juice-shop.git
+cd juice-shop
+git apply /path/to/appsec-vuln-lab/fixes/juice-shop-v17.3.0-fixes.patch
 
-# 2. Apply each change (diffs here are illustrative/representative of the upstream
-#    code; reconcile against the exact lines in your checkout, then commit per fix).
+# 2a. Build & run a patched Docker image (recommended — uses the pinned Node 20 toolchain)
+docker build -t juice-patched:v17.3.0 .
+docker run -d --name juice-patched -p 127.0.0.1:3002:3000 juice-patched:v17.3.0
 
-# 3. Rebuild and run the patched instance on the lab port
-npm install
-npm run build
-PORT=3000 npm start   # map/expose as http://localhost:3001 to match the lab
+#    ...or 2b. build locally (needs Node 18–22; postinstall builds frontend + server)
+#    npm install && npm start
 
-# 4. Re-run the regression suite against the patched instance
-python3 ../appsec-vuln-lab/scripts/run_all.py
+# 3. Re-run the regression suite against the patched instance
+JUICE_URL=http://localhost:3002 python3 /path/to/appsec-vuln-lab/scripts/run_all.py
+#    expect: 6 passed, 0 vulnerable
 ```
 
-> The diffs reflect the vulnerable patterns these Juice Shop versions are known for;
-> line numbers and surrounding context may differ slightly by sub-version. Treat them
-> as the intended change, and verify behaviour with the regression scripts rather than
-> by line match alone.
+> This exact flow was executed for the retest in [`../REPORT.md`](../REPORT.md#5-retest-results):
+> the patched image reports **6/6 PASS** where the stock image reports 6/6 vulnerable.
+> The per-fix Markdown files show each change in isolation with rationale.

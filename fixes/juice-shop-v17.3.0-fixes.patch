@@ -1,0 +1,155 @@
+diff --git a/frontend/src/app/search-result/search-result.component.ts b/frontend/src/app/search-result/search-result.component.ts
+index 6460e85..77eafea 100644
+--- a/frontend/src/app/search-result/search-result.component.ts
++++ b/frontend/src/app/search-result/search-result.component.ts
+@@ -7,12 +7,12 @@ import { ProductDetailsComponent } from '../product-details/product-details.comp
+ import { ActivatedRoute, Router } from '@angular/router'
+ import { ProductService } from '../Services/product.service'
+ import { BasketService } from '../Services/basket.service'
+-import { type AfterViewInit, Component, NgZone, type OnDestroy, ViewChild, ChangeDetectorRef } from '@angular/core'
++import { type AfterViewInit, Component, NgZone, type OnDestroy, ViewChild, ChangeDetectorRef, SecurityContext } from '@angular/core'
+ import { MatPaginator } from '@angular/material/paginator'
+ import { forkJoin, type Subscription } from 'rxjs'
+ import { MatTableDataSource } from '@angular/material/table'
+ import { MatDialog } from '@angular/material/dialog'
+-import { DomSanitizer, type SafeHtml } from '@angular/platform-browser'
++import { DomSanitizer } from '@angular/platform-browser'
+ import { TranslateService, TranslateModule } from '@ngx-translate/core'
+ import { SocketIoService } from '../Services/socket-io.service'
+ import { SnackBarHelperService } from '../Services/snack-bar-helper.service'
+@@ -54,7 +54,7 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
+   public pageSizeOptions: number[] = []
+   public dataSource!: MatTableDataSource<TableEntry>
+   public gridDataSource!: any
+-  public searchValue?: SafeHtml
++  public searchValue?: string
+   public resultsLength = 0
+   @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator | null = null
+   private readonly productSubscription?: Subscription
+@@ -156,7 +156,7 @@ export class SearchResultComponent implements OnDestroy, AfterViewInit {
+         this.io.socket().emit('verifyLocalXssChallenge', queryParam)
+       }) // vuln-code-snippet hide-end
+       this.dataSource.filter = queryParam.toLowerCase()
+-      this.searchValue = this.sanitizer.bypassSecurityTrustHtml(queryParam) // vuln-code-snippet vuln-line localXssChallenge xssBonusChallenge
++      this.searchValue = this.sanitizer.sanitize(SecurityContext.HTML, queryParam) ?? '' // VL-03: sanitize instead of bypassing Angular output encoding
+       this.gridDataSource.subscribe((result: any) => {
+         if (result.length === 0) {
+           this.emptyState = true
+diff --git a/lib/insecurity.ts b/lib/insecurity.ts
+index 08ee8ad..945df08 100644
+--- a/lib/insecurity.ts
++++ b/lib/insecurity.ts
+@@ -40,6 +40,25 @@ interface IAuthenticatedUsers {
+   updateFrom: (req: Request, user: ResponseWithUser) => any
+ }
+ 
++// VL-06: salted, adaptive password hashing via scrypt (replaces unsalted md5 for passwords).
++const SCRYPT_KEYLEN = 64
++export const hashPassword = (data: string): string => {
++  const salt = crypto.randomBytes(16)
++  const derived = crypto.scryptSync(data, salt, SCRYPT_KEYLEN)
++  return `scrypt$${salt.toString('hex')}$${derived.toString('hex')}`
++}
++export const comparePassword = (data: string, stored: string): boolean => {
++  try {
++    const [scheme, saltHex, hashHex] = (stored ?? '').split('$')
++    if (scheme !== 'scrypt' || !saltHex || !hashHex) return false
++    const derived = crypto.scryptSync(data, Buffer.from(saltHex, 'hex'), SCRYPT_KEYLEN)
++    const expected = Buffer.from(hashHex, 'hex')
++    return derived.length === expected.length && crypto.timingSafeEqual(derived, expected)
++  } catch {
++    return false
++  }
++}
++// Legacy md5 hash retained only for non-password uses (e.g. order ids), never for passwords.
+ export const hash = (data: string) => crypto.createHash('md5').update(data).digest('hex')
+ export const hmac = (data: string) => crypto.createHmac('sha256', 'pa4qacea4VK9t9nGv7yZtwmj').update(data).digest('hex')
+ 
+diff --git a/models/user.ts b/models/user.ts
+index 57606a7..ab856b1 100644
+--- a/models/user.ts
++++ b/models/user.ts
+@@ -74,7 +74,7 @@ const UserModelInit = (sequelize: Sequelize) => { // vuln-code-snippet start wea
+       password: {
+         type: DataTypes.STRING,
+         set (clearTextPassword: string) {
+-          this.setDataValue('password', security.hash(clearTextPassword)) // vuln-code-snippet vuln-line weakPasswordChallenge
++          this.setDataValue('password', security.hashPassword(clearTextPassword)) // VL-06: scrypt instead of unsalted md5
+         }
+       }, // vuln-code-snippet end weakPasswordChallenge
+       role: {
+diff --git a/routes/basket.ts b/routes/basket.ts
+index 8e8989a..b7d4468 100644
+--- a/routes/basket.ts
++++ b/routes/basket.ts
+@@ -17,6 +17,11 @@ export function retrieveBasket () {
+     const id = req.params.id
+     BasketModel.findOne({ where: { id }, include: [{ model: ProductModel, paranoid: false, as: 'Products' }] })
+       .then((basket: BasketModel | null) => {
++        const loggedInUser = security.authenticatedUsers.from(req) // VL-02: enforce basket ownership
++        if (!loggedInUser || (basket == null) || Number((basket as any).UserId) !== Number(loggedInUser.data.id)) {
++          res.status(401).json({ error: 'Access denied.' })
++          return
++        }
+         /* jshint eqeqeq:false */
+         challengeUtils.solveIf(challenges.basketAccessChallenge, () => {
+           const user = security.authenticatedUsers.from(req)
+diff --git a/routes/fileServer.ts b/routes/fileServer.ts
+index 5ee8a7f..9ad1286 100644
+--- a/routes/fileServer.ts
++++ b/routes/fileServer.ts
+@@ -15,7 +15,10 @@ export function servePublicFiles () {
+   return ({ params, query }: Request, res: Response, next: NextFunction) => {
+     const file = params.file
+ 
+-    if (!file.includes('/')) {
++    if (file.includes('%00') || file.includes('\u0000')) { // VL-05: reject poison null byte instead of trimming it
++      res.status(403)
++      next(new Error('Illegal file name.'))
++    } else if (!file.includes('/')) {
+       verify(file, res, next)
+     } else {
+       res.status(403)
+diff --git a/routes/login.ts b/routes/login.ts
+index 8ef89c2..62c826d 100644
+--- a/routes/login.ts
++++ b/routes/login.ts
+@@ -31,10 +31,11 @@ export function login () {
+ 
+   return (req: Request, res: Response, next: NextFunction) => {
+     verifyPreLoginChallenges(req) // vuln-code-snippet hide-line
+-    models.sequelize.query(`SELECT * FROM Users WHERE email = '${req.body.email || ''}' AND password = '${security.hash(req.body.password || '')}' AND deletedAt IS NULL`, { model: UserModel, plain: true }) // vuln-code-snippet vuln-line loginAdminChallenge loginBenderChallenge loginJimChallenge
+-      .then((authenticatedUser) => { // vuln-code-snippet neutral-line loginAdminChallenge loginBenderChallenge loginJimChallenge
++    models.sequelize.query('SELECT * FROM Users WHERE email = $email AND deletedAt IS NULL', { bind: { email: req.body.email || '' }, model: UserModel, plain: true }) // VL-01: parameterized query, no string concatenation
++      .then((authenticatedUser) => {
+         const user = utils.queryResultToJson(authenticatedUser)
+-        if (user.data?.id && user.data.totpSecret !== '') {
++        const passwordValid = Boolean(user.data?.id) && security.comparePassword(req.body.password || '', (user.data as any)?.password ?? '') // VL-01/VL-06: verify password in code
++        if (passwordValid && user.data.totpSecret !== '') {
+           res.status(401).json({
+             status: 'totp_token_required',
+             data: {
+@@ -44,7 +45,7 @@ export function login () {
+               })
+             }
+           })
+-        } else if (user.data?.id) {
++        } else if (passwordValid) {
+           // @ts-expect-error FIXME some properties missing in user - vuln-code-snippet hide-line
+           afterLogin(user, res, next)
+         } else {
+diff --git a/server.ts b/server.ts
+index b72d5d2..413f88e 100644
+--- a/server.ts
++++ b/server.ts
+@@ -334,8 +334,8 @@ restoreOverwrittenFilesWithOriginals().then(() => {
+   app.enable('trust proxy')
+   app.use('/rest/user/reset-password', rateLimit({
+     windowMs: 5 * 60 * 1000,
+-    max: 100,
+-    keyGenerator ({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } // vuln-code-snippet vuln-line resetPasswordMortyChallenge
++    max: 5, // VL-04: strict cap to stop online brute force of low-entropy security answers
++    keyGenerator: (req: any) => req.socket?.remoteAddress ?? req.ip // VL-04: key on the real TCP peer, not the spoofable X-Forwarded-For header
+   }))
+   // vuln-code-snippet end resetPasswordMortyChallenge
+ 
