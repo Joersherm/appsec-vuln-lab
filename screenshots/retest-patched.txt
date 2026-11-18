@@ -1,0 +1,28 @@
+# Regression suite — PATCHED build
+# Target: patched OWASP Juice Shop v17.3.0 @ http://localhost:3003
+# Date: 2026-11-18T00:32:05Z
+
+Target: http://localhost:3003
+============================================================
+[PASS] VL-01 SQLi login auth bypass: patched (exploit blocked)
+       injection rejected (HTTP 401/401, no token issued).
+[PASS] VL-02 IDOR basket access: patched (exploit blocked)
+       cross-user basket reads were refused (no ownership bypass).
+[PASS] VL-03 DOM XSS in search: patched (exploit blocked)
+       payload sanitized (no live injected element in the rendered DOM).
+[PASS] VL-04 password-reset brute force: patched (exploit blocked)
+       server began throttling at attempt 1 (HTTP 429). Statuses: [429]
+[PASS] VL-05 /ftp null-byte bypass: patched (exploit blocked)
+       null-byte bypass refused (HTTP 403). NOTE: /ftp/acquisitions.md is still anonymously readable — consider removing confidential files from the public dir (see fix 05).
+[PASS] VL-06 unsalted MD5 password hash: patched (exploit blocked)
+       stored password is not MD5 (format: scrypt$...).
+============================================================
+Summary:
+  [PASS] VL-01 SQLi login auth bypass
+  [PASS] VL-02 IDOR basket access
+  [PASS] VL-03 DOM XSS in search
+  [PASS] VL-04 password-reset brute force
+  [PASS] VL-05 /ftp null-byte bypass
+  [PASS] VL-06 unsalted MD5 password hash
+
+6 passed, 0 vulnerable, 0 skipped.

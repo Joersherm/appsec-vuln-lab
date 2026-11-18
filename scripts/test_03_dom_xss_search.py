@@ -1,56 +1,75 @@
 #!/usr/bin/env python3
 """VL-03 regression: DOM-based XSS in product search.
 
-The sink is client-side (`bypassSecurityTrustHtml` in the Angular bundle), so this
-script checks two server-observable signals:
+The sink is client-side, so this renders the search page in a headless browser and
+inspects the resulting DOM. The payload is an empty `<iframe>` carrying a marker class
+(no script, no dialog — so it never blocks headless). `<iframe>` is a tag Angular's HTML
+sanitizer removes entirely, so:
 
-  1. The product search API does NOT reflect the raw payload unescaped into an
-     HTML/JS response (a server-side reflection would be an extra, clearer flaw).
-  2. The built frontend bundle no longer binds the search term via the
-     `bypassSecurityTrustHtml` sink.
+  Vulnerable -> the search term is trusted as raw HTML; the live `<iframe class=MARKER>`
+                element survives into the rendered DOM.
+  Patched    -> the iframe is stripped (or escaped to inert text); the live element with
+                the marker is absent.
 
-Full in-browser execution proof is captured as a screenshot during live retest.
-
-  Vulnerable -> main JS bundle still contains the bypassSecurityTrustHtml sink.
-  Patched    -> sink removed (or term rendered via interpolation/sanitize()).
+Needs a Chromium/Chrome binary (set CHROME, or common install paths are tried). If none
+is found the test SKIPs rather than guessing.
 """
-import re
+import os
+import shutil
+import subprocess
+import tempfile
+from urllib.parse import quote
 import common as c
 
-PAYLOAD = '<iframe src="javascript:alert(`xss`)">'
+PROBE = "XSSPROBE37"
+PAYLOAD = f'<iframe class="{PROBE}"></iframe>'
+
+CHROME_CANDIDATES = [
+    os.environ.get("CHROME", ""),
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    shutil.which("google-chrome") or "",
+    shutil.which("chromium") or "",
+    shutil.which("chromium-browser") or "",
+]
 
 
-def find_main_bundle():
-    r = c.get("/")
-    if r.status != 200:
-        return None
-    m = re.findall(r'(?:src=")(main[.\w-]*\.js)"?', r.text)
-    return m[0] if m else "main.js"
+def find_chrome():
+    for p in CHROME_CANDIDATES:
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def dump_dom(chrome, url):
+    with tempfile.TemporaryDirectory() as prof:
+        out = subprocess.run(
+            [chrome, "--headless=new", "--disable-gpu", "--no-sandbox",
+             f"--user-data-dir={prof}", "--virtual-time-budget=8000",
+             "--dump-dom", url],
+            capture_output=True, text=True, timeout=60,
+        )
+        return out.stdout or ""
 
 
 def test():
-    # (1) search API should not echo the raw payload back verbatim in a doc response
-    from urllib.parse import quote
-    r = c.get("/rest/products/search?q=" + quote(PAYLOAD))
-    api_reflects = PAYLOAD in r.text
+    chrome = find_chrome()
+    if not chrome:
+        return c.UNREACHABLE, "no Chrome/Chromium found (set CHROME) to render the DOM."
 
-    # (2) inspect the main JS bundle for the sink
-    bundle = find_main_bundle()
-    sink_present = None
-    if bundle:
-        b = c.get(f"/{bundle}")
-        if b.status == 200:
-            sink_present = "bypassSecurityTrustHtml" in b.text
+    url = f"{c.BASE_URL}/#/search?q={quote(PAYLOAD)}"
+    dom = dump_dom(chrome, url)
+    if not dom:
+        return c.UNREACHABLE, "headless render produced no DOM."
 
-    if sink_present is True:
-        return c.FAIL, (f"frontend bundle {bundle} still uses bypassSecurityTrustHtml "
-                        "— the DOM-XSS sink for the search term is present.")
-    if api_reflects:
-        return c.FAIL, "search API reflects the raw HTML payload unescaped."
-    if sink_present is None and bundle is None:
-        return c.UNREACHABLE, "could not locate the main JS bundle to inspect the sink."
-    return c.PASS, (f"sink absent from {bundle or 'bundle'} and payload not reflected "
-                    "unescaped.")
+    # A live <iframe class="XSSPROBE37"> element in the serialized DOM means the search
+    # term was trusted as raw HTML. Escaped text would serialize as &lt;iframe and not
+    # match this; a stripped element is simply absent.
+    live_element = f'<iframe class="{PROBE}"' in dom or f"<iframe class={PROBE}" in dom
+    if live_element:
+        return c.FAIL, ("search term rendered as raw HTML — live "
+                        f'<iframe class="{PROBE}"> element present in the DOM.')
+    return c.PASS, "payload sanitized (no live injected element in the rendered DOM)."
 
 
 if __name__ == "__main__":

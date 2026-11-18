@@ -75,10 +75,11 @@ each with a source-code fix and an automated regression script.
 Full write-up in [REPORT.md](REPORT.md); fixes in [`fixes/`](fixes/); regression suite
 in [`scripts/`](scripts/) (`python3 scripts/run_all.py`).
 
-**Live baseline verified (2026-11-17):** all 6 findings reproduced against a live
-Juice Shop `v17.3.0` container — `scripts/run_all.py` → `6 vulnerable`. Evidence in
-[`screenshots/`](screenshots/). The patched ("after") run is the one remaining step:
-apply [`fixes/`](fixes/) to a fork, rebuild, and re-run the suite (expect `6 passed`).
+**Verified end-to-end (2026-11-17):** both runs executed live.
+- Stock `v17.3.0` → `scripts/run_all.py` = **6 vulnerable**.
+- Patched build (with [`fixes/juice-shop-v17.3.0-fixes.patch`](fixes/juice-shop-v17.3.0-fixes.patch)) → **6 passed**.
+
+Side-by-side proof: [`screenshots/retest-before-after.png`](screenshots/retest-before-after.png).
 See [REPORT.md §5](REPORT.md#5-retest-results).
 
 ## Disclaimer

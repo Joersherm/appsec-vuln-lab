@@ -55,7 +55,7 @@ runs. `bypassSecurityTrustHtml` was the sink that disabled this protection.
 python3 scripts/test_03_dom_xss_search.py    # PASS (exit 0) only when patched
 ```
 
-> Note: the script checks the server-reflected contract and that the built JS bundle no
-> longer contains the `bypassSecurityTrustHtml` sink for the search term. Full
-> execution confirmation is captured as a browser screenshot during live retest
-> (`screenshots/`).
+> Note: the script verifies this **behaviorally** — it renders `/#/search?q=<iframe…>`
+> in headless Chrome and checks whether the injected `<iframe>` survives into the DOM
+> (vulnerable) or is sanitized away (patched). Confirmed live: present on the stock
+> build, absent on the patched build.

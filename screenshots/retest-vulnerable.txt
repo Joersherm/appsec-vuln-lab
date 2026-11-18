@@ -1,6 +1,6 @@
 # Regression suite — VULNERABLE baseline
-# Target: OWASP Juice Shop v17.3.0 @ http://localhost:3002
-# Date: 2026-11-17T22:34:33Z
+# Target: stock OWASP Juice Shop v17.3.0 @ http://localhost:3002
+# Date: 2026-11-18T00:32:03Z
 
 Target: http://localhost:3002
 ============================================================
@@ -9,7 +9,7 @@ Target: http://localhost:3002
 [FAIL] VL-02 IDOR basket access: VULNERABLE (exploit succeeded)
        read baskets not owned by the caller: basket 1 (UserId=1), basket 2 (UserId=2)
 [FAIL] VL-03 DOM XSS in search: VULNERABLE (exploit succeeded)
-       frontend bundle main.js still uses bypassSecurityTrustHtml — the DOM-XSS sink for the search term is present.
+       search term rendered as raw HTML — live <iframe class="XSSPROBE37"> element present in the DOM.
 [FAIL] VL-04 password-reset brute force: VULNERABLE (exploit succeeded)
        15 wrong answers accepted with no 429 throttle (statuses: [401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401, 401]). Online brute force is feasible.
 [FAIL] VL-05 /ftp null-byte bypass: VULNERABLE (exploit succeeded)
@@ -26,5 +26,3 @@ Summary:
   [FAIL] VL-06 unsalted MD5 password hash
 
 0 passed, 6 vulnerable, 0 skipped.
-
-suite exit=0

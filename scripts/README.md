@@ -35,6 +35,10 @@ python3 scripts/test_01_sqli_login.py
 VL-06 needs no admin token: it reads the stored hash from the login JWT the app issues
 to the probe user itself.
 
+VL-03 needs a Chrome/Chromium binary to render the DOM (set `CHROME`, or it tries common
+install paths). If none is found it SKIPs rather than guessing. Everything else is
+pure standard library.
+
 Credentials are **not** committed. Export them from your local notes before running the
 checks that need them, e.g.:
 
@@ -49,7 +53,7 @@ python3 scripts/test_02_idor_basket.py
 |--------|---------|-----------------|
 | `test_01_sqli_login.py` | VL-01 | `' OR 1=1--` does not authenticate |
 | `test_02_idor_basket.py` | VL-02 | can't read another user's basket by id |
-| `test_03_dom_xss_search.py` | VL-03 | `bypassSecurityTrustHtml` sink gone; payload not reflected |
+| `test_03_dom_xss_search.py` | VL-03 | injected `<iframe>` sanitized out of the rendered DOM (headless Chrome) |
 | `test_04_password_reset_bruteforce.py` | VL-04 | reset endpoint throttles (429) |
 | `test_05_ftp_null_byte.py` | VL-05 | `%2500.md` null-byte bypass refused |
 | `test_06_password_hash.py` | VL-06 | stored password is bcrypt, not unsalted MD5 |

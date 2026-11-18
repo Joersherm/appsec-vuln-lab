@@ -64,44 +64,48 @@ standard project-wide; keep confidential files out of any publicly served direct
 
 ## 5. Retest results
 
-The vulnerable baseline was run **live** on 2026-11-17 against OWASP Juice Shop
-`v17.3.0` in Docker at `http://localhost:3002` (port `3002` was used because `3001` was
-occupied by an unrelated service). **All six findings reproduced** —
-`python3 scripts/run_all.py` reported `0 passed, 6 vulnerable, 0 skipped`. Evidence is
-in `screenshots/` (suite output, raw HTTP proof, and the live app).
+Both runs were executed **live** on 2026-11-17.
 
-The exploits were corroborated independently by the application's own challenge tracker,
-which registered **Login Admin** (VL-01), **View Basket** (VL-02), **Poison Null Byte**
-and **Confidential Document** (VL-05), and **Password Strength** (VL-01/06) — visible in
-`screenshots/app-home.png`.
+- **Before (stock):** `bkimminich/juice-shop:v17.3.0` at `http://localhost:3002` →
+  `python3 scripts/run_all.py` reported **`0 passed, 6 vulnerable, 0 skipped`**.
+- **After (patched):** a fork with `fixes/juice-shop-v17.3.0-fixes.patch` applied, built
+  into an image and run at `http://localhost:3003` → **`6 passed, 0 vulnerable,
+  0 skipped`**.
 
-The **patched ("after") column is pending**: it requires applying `fixes/` to a Juice
-Shop fork, rebuilding, and re-running the suite (expected `6 passed`). The scripts'
-exit-code contract makes this a single `run_all.py` invocation.
+Side-by-side evidence: `screenshots/retest-before-after.png`. The stock exploits were
+also corroborated by Juice Shop's own challenge tracker (Login Admin, View Basket,
+Poison Null Byte, Confidential Document, Password Strength) in `screenshots/app-home.png`.
+Legitimate login still works on the patched build (admin/admin123 → HTTP 200), confirming
+the scrypt migration preserved authentication.
 
 ### Retest table
 
-| ID | Vulnerable build (verified live) | Patched build | Evidence |
-|----|----------------------------------|---------------|----------|
-| VL-01 | **FAIL** — `' OR 1=1--` returns an `admin` (id 1) JWT | _pending rebuild_ | `retest-vulnerable.png`, `raw-http-evidence.txt`, `app-home.png` |
-| VL-02 | **FAIL** — read baskets 1 & 2 (other users) | _pending rebuild_ | `retest-vulnerable.png` |
-| VL-03 | **FAIL** — `bypassSecurityTrustHtml` sink present in `main.js` | _pending rebuild_ | `retest-vulnerable.png` |
-| VL-04 | **FAIL** — 15 wrong reset answers, no `429` | _pending rebuild_ | `retest-vulnerable.png` |
-| VL-05 | **FAIL** — `%2500.md` served `package.json.bak` | _pending rebuild_ | `retest-vulnerable.png`, `vl05-ftp-exposure.png` |
-| VL-06 | **FAIL** — stored hash == `md5(password)` | _pending rebuild_ | `retest-vulnerable.png`, `raw-http-evidence.txt` |
+| ID | Before — stock (3002) | After — patched (3003) | Evidence |
+|----|------------------------|------------------------|----------|
+| VL-01 | **FAIL** — `' OR 1=1--` returns an `admin` (id 1) JWT | **PASS** — injection → HTTP 401, no token | `retest-before-after.png`, `raw-http-evidence.txt` |
+| VL-02 | **FAIL** — read baskets 1 & 2 (other users) | **PASS** — cross-user reads refused | `retest-before-after.png` |
+| VL-03 | **FAIL** — live `<iframe>` injected into DOM | **PASS** — payload sanitized, no live element | `retest-before-after.png` |
+| VL-04 | **FAIL** — 15 wrong reset answers, no `429` | **PASS** — endpoint throttles (HTTP 429) | `retest-before-after.png` |
+| VL-05 | **FAIL** — `%2500.md` served `package.json.bak` | **PASS** — null-byte refused (HTTP 403) | `retest-before-after.png`, `vl05-ftp-exposure.png` |
+| VL-06 | **FAIL** — stored hash == `md5(password)` | **PASS** — stored as `scrypt$…` | `retest-before-after.png` |
 
-### Reproducing / completing the patched run
+### Reproducing
 
 ```bash
-# Vulnerable baseline (already captured):
+# Before (stock):
 docker run -d --name juice -p 127.0.0.1:3002:3000 bkimminich/juice-shop:v17.3.0
-export JUICE_URL=http://localhost:3002 TEST_EMAIL=... TEST_PASSWORD=...
-python3 scripts/run_all.py            # -> 6 vulnerable
+JUICE_URL=http://localhost:3002 TEST_EMAIL=... TEST_PASSWORD=... python3 scripts/run_all.py  # 6 vulnerable
 
-# Patched build (to complete the "after" column):
-#   apply fixes/ to a juice-shop v17.3.0 fork, rebuild, run it on the same URL, then:
-python3 scripts/run_all.py            # expect -> 6 passed
+# After (patched):
+git clone --depth 1 --branch v17.3.0 https://github.com/juice-shop/juice-shop.git && cd juice-shop
+git apply /path/to/fixes/juice-shop-v17.3.0-fixes.patch
+docker build -t juice-patched:v17.3.0 . && docker run -d -p 127.0.0.1:3003:3000 juice-patched:v17.3.0
+JUICE_URL=http://localhost:3003 TEST_EMAIL=... TEST_PASSWORD=... python3 scripts/run_all.py  # 6 passed
 ```
+
+> Build note: Juice Shop's Dockerfile uses the EOL `node:20-buster` base; two lines need
+> a one-time tweak (point apt at `archive.debian.org`, drop the optional SBOM step) for
+> the image to build today. This does not affect the application code or the fixes.
 
 ## 6. Disclaimer
 
